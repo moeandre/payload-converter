@@ -1,0 +1,80 @@
+# Exemplo de fluxo de conversao: Sistema A (origem) -> Sistema B (destino).
+# Demonstra: campo aninhado -> achatado, condicional (when), tabela de-para (map),
+# concatenacao, formatacao de data, valor obrigatorio, valor default, aninhamento via
+# forEach (array -> array) e um "componente de mercado" (regra de negocio de seguro-auto).
+#
+# Veja o schema completo documentado no README.md.
+
+id: sistemaA-para-sistemaB
+descricao: "Converte o payload de apolice do Sistema A para o formato do Sistema B"
+mercado: seguro-auto
+
+mappings:
+  # documento{numero,tipo} (origem) -> numeroCpf | numeroCnpj (destino), conforme o tipo
+  - target: numeroCpf
+    source: documento.numero
+    when: "documento.tipo == 'CPF'"
+
+  - target: numeroCnpj
+    source: documento.numero
+    when: "documento.tipo == 'CNPJ'"
+
+  # tabela de-para (enum de origem -> valor de destino)
+  - target: cliente.tipoPessoa
+    source: documento.tipo
+    transform:
+      function: map
+      args:
+        valores:
+          CPF: PESSOA_FISICA
+          CNPJ: PESSOA_JURIDICA
+        padrao: DESCONHECIDO
+
+  # combina dois campos de origem em um so campo de destino
+  - target: cliente.nomeCompleto
+    transform:
+      function: concat
+      args:
+        separador: " "
+        origens: [cliente.primeiroNome, cliente.sobrenome]
+
+  # reformata data
+  - target: cliente.dataNascimento
+    source: cliente.nascimento
+    transform:
+      function: dataFormato
+      args:
+        origem: "yyyy-MM-dd"
+        destino: "dd/MM/yyyy"
+
+  # obrigatorio: a conversao falha (HTTP 422) se 'documento.numero' nao existir
+  - target: cliente.documentoOrigem
+    source: documento.numero
+    required: true
+
+  # default: usado quando o campo de origem nao existir no payload
+  - target: cliente.canalVenda
+    source: venda.canal
+    default: "DIGITAL"
+
+  # aninhamento: itera 'produtos' (array de origem) e monta 'itens' (array de destino)
+  - target: itens
+    forEach: produtos
+    as: item
+    mappings:
+      - target: sku
+        source: item.codigo
+      - target: quantidade
+        source: item.qtd
+        default: 1
+      # dentro do forEach, 'root.' acessa o payload de origem completo, nao o item atual
+      - target: numeroApoliceOrigem
+        source: root.documento.numero
+
+  # componente de mercado: regra de negocio especifica de seguro-auto
+  - target: premio.valorFinal
+    component:
+      nome: seguroAuto.calculoPremio
+      args:
+        aliquotaBase: 0.045
+        descontoBonusPorClasse: 0.05

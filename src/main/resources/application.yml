@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: payload-converter
+  threads:
+    virtual:
+      enabled: true # Java 21 virtual threads no Tomcat: alta concorrencia com baixo overhead
+
+server:
+  port: 8080
+
+# Configuracao propria do orquestrador
+payload-converter:
+  # padrao de resource onde os YAML de de-para sao procurados no startup
+  mappings-location: classpath:mappings/*.yml
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    io.payloadconverter: INFO
