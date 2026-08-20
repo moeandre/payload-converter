@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Payload de destino - Sistema B",
+  "type": "object",
+  "properties": {
+    "numeroCpf": { "type": "string" },
+    "numeroCnpj": { "type": "string" },
+    "cliente": {
+      "type": "object",
+      "properties": {
+        "tipoPessoa": { "type": "string" },
+        "nomeCompleto": { "type": "string" },
+        "dataNascimento": { "type": "string" },
+        "documentoOrigem": { "type": "string" },
+        "canalVenda": { "type": "string" }
+      }
+    },
+    "itens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sku": { "type": "string" },
+          "quantidade": { "type": "integer" },
+          "numeroApoliceOrigem": { "type": "string" }
+        }
+      }
+    },
+    "premio": {
+      "type": "object",
+      "properties": {
+        "valorFinal": { "type": "number" }
+      }
+    }
+  }
+}

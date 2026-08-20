@@ -3,6 +3,7 @@ package io.payloadconverter.api;
 import io.payloadconverter.api.dto.ErroResposta;
 import io.payloadconverter.engine.ConversionException;
 import io.payloadconverter.expression.ExpressionSyntaxException;
+import io.payloadconverter.mapping.MappingConfigException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -36,6 +37,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ExpressionSyntaxException.class)
     public ResponseEntity<ErroResposta> expressaoInvalida(ExpressionSyntaxException e) {
         return responder(HttpStatus.UNPROCESSABLE_ENTITY, "expressao_invalida", e.getMessage(), null, null);
+    }
+
+    /** Falha ao (re)carregar YAML de mapeamento - ex: via POST /admin/mappings/reload com um arquivo invalido. */
+    @ExceptionHandler(MappingConfigException.class)
+    public ResponseEntity<ErroResposta> configuracaoInvalida(MappingConfigException e) {
+        log.warn("Falha ao carregar configuracao de mapeamento: {}", e.getMessage());
+        return responder(HttpStatus.UNPROCESSABLE_ENTITY, "configuracao_invalida", e.getMessage(), null, null);
     }
 
     /** JSON de entrada malformado. */

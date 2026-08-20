@@ -15,7 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** Teste ponta-a-ponta via API HTTP, usando o fluxo de exemplo empacotado em src/main/resources/mappings. */
 @SpringBootTest
 @AutoConfigureMockMvc
-class ConversionControllerIT {
+class ConversionControllerTest {
 
     @Autowired
     private MockMvc mockMvc;

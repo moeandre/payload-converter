@@ -6,6 +6,9 @@ arquivos **YAML** — sem recompilar código para adicionar um novo fluxo de con
 Stack: **Java 21+**, **Spring Boot 3.5**, Jackson (JSON + YAML). API REST, sem estado,
 com Virtual Threads habilitadas (Java 21) para alta concorrência.
 
+> ✅ Compilado e testado localmente (JDK 22, Maven 3.9.9) — 32/32 testes passando
+> (`mvn clean test`, `BUILD SUCCESS`), incluindo o fluxo de exemplo ponta-a-ponta via API.
+
 ## Por que assim
 
 - **Configurável**: cada fluxo (par origem→destino) é um arquivo YAML. Subir um novo
@@ -20,24 +23,34 @@ com Virtual Threads habilitadas (Java 21) para alta concorrência.
   (ex: cálculo de prêmio de seguro-auto) são plugáveis via interface Java
   (`MarketComponent`), referenciadas pelo nome no YAML — a lógica complexa continua em
   Java testável, só o *encaixe* dela no de-para é declarativo.
-- **Rápido**: configuração é parseada uma vez (no startup) e mantida em memória;
-  expressões `when` são compiladas (parseadas) uma única vez e cacheadas; toda a
-  travessia usa a árvore `JsonNode` do Jackson, sem reflection dinâmica.
-
-> ⚠️ Este ambiente de geração não tinha JDK/Maven instalados, então o projeto **não foi
-> compilado nem testado aqui**. Rode `mvn test` localmente antes de confiar no código —
-> veja [Como rodar](#como-rodar). Se algo não compilar, me diga o erro e eu conserto.
+- **Validável**: JSON Schema opcional para o payload de origem e/ou de destino,
+  declarado no próprio YAML do fluxo.
+- **Configuração viva**: os YAML podem ser recarregados sem reiniciar a aplicação -
+  automaticamente (watcher de filesystem) ou sob demanda (endpoint admin).
+- **Rápido**: configuração é parseada uma vez e mantida em memória; expressões `when` e
+  schemas são compilados/parseados uma única vez e cacheados; toda a travessia usa a
+  árvore `JsonNode` do Jackson, sem reflection dinâmica.
 
 ## Como rodar
 
+O projeto inclui o **Maven Wrapper** — não precisa ter Maven instalado, só JDK 21+:
+
 ```bash
-mvn spring-boot:run
+./mvnw spring-boot:run
 ```
 
-Ou empacotar e rodar o jar:
+(Windows: `mvnw.cmd spring-boot:run`)
+
+Rodar os testes:
 
 ```bash
-mvn clean package
+./mvnw clean test
+```
+
+Empacotar e rodar o jar:
+
+```bash
+./mvnw clean package
 java -jar target/payload-converter-0.1.0-SNAPSHOT.jar
 ```
 
@@ -62,17 +75,19 @@ curl -X POST http://localhost:8080/convert/sistemaA-para-sistemaB \
 ```
 src/main/java/io/payloadconverter/
   mapping/model/      # MappingConfig, MappingRule, TransformSpec, ComponentSpec (records)
-  mapping/            # MappingConfigRegistry - carrega os YAML no startup
-  engine/              # MappingEngine (motor), ConversionContext, PathResolver/Writer
+  mapping/            # MappingConfigRegistry (carrega/recarrega os YAML) + MappingHotReloadWatcher
+  engine/              # MappingEngine (motor), SchemaValidatingConverter, ConversionContext, PathResolver/Writer
   expression/          # DSL de condicionais: Lexer, ExpressionParser, ExpressionEvaluator
   function/            # TransformFunction + FunctionRegistry
   function/builtin/    # funções built-in: map, concat, dataFormato, substring, ...
   component/           # MarketComponent + ComponentRegistry ("componentes de mercado")
   component/exemplo/   # exemplo de componente de mercado (seguro-auto)
-  api/                 # ConversionController + GlobalExceptionHandler
+  schema/              # SchemaValidator + SchemaValidationException (JSON Schema)
+  api/                 # ConversionController, AdminController, GlobalExceptionHandler
 src/main/resources/
   application.yml
   mappings/*.yml       # os fluxos de conversão
+  schemas/*.json       # JSON Schemas usados pelos fluxos (opcional)
 src/test/java/...       # testes unitários e de integração (MockMvc)
 ```
 
@@ -82,6 +97,8 @@ src/test/java/...       # testes unitários e de integração (MockMvc)
 id: sistemaA-para-sistemaB        # obrigatório - usado em POST /convert/{id}
 descricao: "texto livre"          # opcional
 mercado: seguro-auto              # opcional, apenas documentacional/agrupamento
+schemaOrigem: schemas/x.json      # opcional - JSON Schema do payload de origem
+schemaDestino: schemas/y.json     # opcional - JSON Schema do payload de destino
 
 mappings:                         # lista ordenada de regras
   - target: caminho.no.destino    # obrigatório
@@ -224,12 +241,61 @@ Nenhum outro cadastro é necessário — o `FunctionRegistry`/`ComponentRegistry
 `List<TransformFunction>`/`List<MarketComponent>` e monta o índice por nome no startup,
 falhando cedo (na subida da aplicação) se dois beans usarem o mesmo nome.
 
+## Validação por JSON Schema
+
+Cada fluxo pode declarar, opcionalmente, um schema para o payload de **origem** e/ou de
+**destino** (draft 2020-12, via [`com.networknt:json-schema-validator`](https://github.com/networknt/json-schema-validator)):
+
+```yaml
+schemaOrigem: schemas/sistemaA.schema.json
+schemaDestino: schemas/sistemaB.schema.json
+```
+
+- `schemaOrigem` é validado **antes** de qualquer regra de mapeamento rodar.
+- `schemaDestino` é validado **depois** que o payload de destino foi montado.
+- Falha de validação → `422` (`SchemaValidationException` estende `ConversionException`,
+  então cai no mesmo handler/código de erro `falha_conversao`), com a lista de violações
+  do schema concatenada na mensagem.
+- Caminhos são resolvidos como `classpath:` por padrão (ou `file:`/`http:` explícitos);
+  schemas compilados ficam em cache em memória.
+- Ambos os campos são opcionais e independentes - um fluxo pode não ter nenhum, só
+  origem, só destino, ou os dois. Veja
+  [schemas/sistemaA.schema.json](src/main/resources/schemas/sistemaA.schema.json) e
+  [schemas/sistemaB.schema.json](src/main/resources/schemas/sistemaB.schema.json).
+
+## Hot-reload dos YAML (sem reiniciar)
+
+Os arquivos de mapeamento podem ser recarregados em tempo de execução, de duas formas
+complementares:
+
+1. **Automático** (`MappingHotReloadWatcher`): observa o diretório configurado em
+   `payload-converter.mappings-location` via `java.nio.file.WatchService` e recarrega
+   sozinho quando um `.yml`/`.yaml` é criado, alterado ou removido (com debounce de
+   `payload-converter.hot-reload.debounce-ms`, default 300ms, para agrupar rajadas de
+   eventos). Só funciona quando a localização resolve para um **diretório real em
+   disco** - rodando via `mvn`/IDE (`target/classes/mappings`), ou apontando para um
+   diretório externo com `mappings-location: file:/etc/payload-converter/mappings/*.yml`
+   em produção. Dentro de um JAR empacotado não há diretório real para observar, e o
+   watcher fica inativo (log informativo na subida) - use a opção manual abaixo.
+   Desativável com `payload-converter.hot-reload.enabled: false`.
+2. **Manual** (sempre disponível, independe do watcher):
+   ```bash
+   curl -X POST http://localhost:8080/admin/mappings/reload
+   ```
+   Retorna os fluxos carregados após a recarga.
+
+Em ambos os casos, **a recarga é atômica e resiliente**: se o novo conjunto de arquivos
+tiver um YAML inválido ou um `id` duplicado, a recarga é abortada, o erro é reportado
+(no endpoint) ou logado (no watcher automático), e a configuração anterior continua
+válida e servindo requisições normalmente - nunca fica um estado quebrado no ar.
+
 ## Tratamento de erros (API)
 
 | Situação                                   | HTTP |
 |---------------------------------------------|------|
 | Fluxo (`id`) inexistente                     | 404  |
-| Campo `required` ausente, função/componente desconhecido, array esperado e não encontrado, etc. | 422  |
+| Campo `required` ausente, função/componente desconhecido, array esperado e não encontrado, payload fora do JSON Schema, etc. | 422  |
+| YAML de mapeamento inválido (ex: em `POST /admin/mappings/reload`) | 422  |
 | JSON de entrada malformado                   | 400  |
 | Erro inesperado                              | 500  |
 
@@ -238,7 +304,9 @@ Corpo de erro padrão: `{ timestamp, status, erro, mensagem, fluxo, target }`.
 ## Próximos passos sugeridos (não implementados)
 
 - Suporte a XML/outros formatos além de JSON, via adaptadores de (de)serialização plugáveis.
-- Validação de schema (JSON Schema) do payload de origem/destino antes/depois da conversão.
-- Hot-reload dos YAML sem reiniciar (hoje o carregamento é só no startup).
 - Endpoint de "dry-run"/preview que mostra, por regra, qual valor foi resolvido - útil
   para depurar um YAML novo sem precisar ler logs.
+- Watcher recursivo (hoje observa só o diretório configurado, não subdiretórios) e
+  watch de múltiplos diretórios quando `mappings-location` aponta para mais de um.
+- Métricas por fluxo (contagem/latência de conversões, taxa de erro) via Micrometer -
+  o Actuator já está no classpath, faltaria expor `/actuator/metrics` com tags por `id`.

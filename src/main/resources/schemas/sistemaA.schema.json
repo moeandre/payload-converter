@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Payload de origem - Sistema A",
+  "type": "object",
+  "properties": {
+    "documento": {
+      "type": "object",
+      "properties": {
+        "numero": { "type": "string" },
+        "tipo": { "type": "string", "enum": ["CPF", "CNPJ"] }
+      }
+    },
+    "cliente": {
+      "type": "object",
+      "properties": {
+        "primeiroNome": { "type": "string" },
+        "sobrenome": { "type": "string" },
+        "nascimento": { "type": "string", "format": "date" }
+      }
+    },
+    "veiculo": {
+      "type": "object",
+      "properties": {
+        "valorFipe": { "type": "number", "minimum": 0 }
+      }
+    },
+    "condutor": {
+      "type": "object",
+      "properties": {
+        "classeBonus": { "type": "integer", "minimum": 0, "maximum": 9 }
+      }
+    },
+    "produtos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["codigo"],
+        "properties": {
+          "codigo": { "type": "string" },
+          "qtd": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  }
+}

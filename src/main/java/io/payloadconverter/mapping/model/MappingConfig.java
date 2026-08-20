@@ -5,17 +5,22 @@ import java.util.List;
 /**
  * Raiz de um arquivo de configuracao de conversao (YAML).
  *
- * @param id        identificador do fluxo, usado para selecionar a configuracao
- *                  (ex: no path da API {@code POST /convert/{id}})
- * @param descricao texto livre, apenas documentacional
- * @param mercado   tag opcional de mercado/produto (ex: "seguro-auto"), usada para
- *                  agrupar fluxos e, opcionalmente, resolver componentes especificos
- * @param mappings  lista ordenada de regras de mapeamento de-para
+ * @param id            identificador do fluxo, usado para selecionar a configuracao
+ *                      (ex: no path da API {@code POST /convert/{id}})
+ * @param descricao     texto livre, apenas documentacional
+ * @param mercado       tag opcional de mercado/produto (ex: "seguro-auto"), usada para
+ *                      agrupar fluxos e, opcionalmente, resolver componentes especificos
+ * @param schemaOrigem  caminho (classpath ou filesystem, resolvido como {@link org.springframework.core.io.Resource})
+ *                      de um JSON Schema opcional para validar o payload de origem antes da conversao
+ * @param schemaDestino caminho de um JSON Schema opcional para validar o payload resultante apos a conversao
+ * @param mappings      lista ordenada de regras de mapeamento de-para
  */
 public record MappingConfig(
         String id,
         String descricao,
         String mercado,
+        String schemaOrigem,
+        String schemaDestino,
         List<MappingRule> mappings
 ) {
     public MappingConfig {

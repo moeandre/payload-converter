@@ -10,8 +10,15 @@ server:
 
 # Configuracao propria do orquestrador
 payload-converter:
-  # padrao de resource onde os YAML de de-para sao procurados no startup
+  # padrao de resource onde os YAML de de-para sao procurados (no startup e a cada reload)
   mappings-location: classpath:mappings/*.yml
+  hot-reload:
+    # observa o diretorio de mappings e recarrega automaticamente quando um .yml muda
+    # (so tem efeito quando 'mappings-location' resolve para um diretorio real em disco -
+    # ver io.payloadconverter.mapping.MappingHotReloadWatcher). Sempre da pra forcar uma
+    # recarga manual via POST /admin/mappings/reload, mesmo com isso desabilitado.
+    enabled: true
+    debounce-ms: 300
 
 management:
   endpoints:

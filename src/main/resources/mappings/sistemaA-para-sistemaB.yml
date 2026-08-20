@@ -9,6 +9,10 @@ id: sistemaA-para-sistemaB
 descricao: "Converte o payload de apolice do Sistema A para o formato do Sistema B"
 mercado: seguro-auto
 
+# validacao opcional de JSON Schema, antes e depois da conversao (ver src/main/resources/schemas)
+schemaOrigem: schemas/sistemaA.schema.json
+schemaDestino: schemas/sistemaB.schema.json
+
 mappings:
   # documento{numero,tipo} (origem) -> numeroCpf | numeroCnpj (destino), conforme o tipo
   - target: numeroCpf
