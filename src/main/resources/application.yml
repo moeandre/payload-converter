@@ -19,6 +19,10 @@ payload-converter:
     # recarga manual via POST /admin/mappings/reload, mesmo com isso desabilitado.
     enabled: true
     debounce-ms: 300
+  encaminhamento:
+    # timeouts da chamada HTTP feita ao sistema de destino (fluxos com 'destino' configurado)
+    connect-timeout-ms: 5000
+    read-timeout-ms: 15000
 
 management:
   endpoints:

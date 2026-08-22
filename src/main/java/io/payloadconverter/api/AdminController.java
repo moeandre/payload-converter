@@ -1,10 +1,12 @@
 package io.payloadconverter.api;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.payloadconverter.mapping.MappingConfigRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.Map;
@@ -22,6 +24,7 @@ import java.util.Map;
 public class AdminController {
 
     private final MappingConfigRegistry configuracoes;
+    private static final Logger log = LoggerFactory.getLogger(AdminController.class);
 
     public AdminController(MappingConfigRegistry configuracoes) {
         this.configuracoes = configuracoes;
@@ -35,5 +38,15 @@ public class AdminController {
                 "timestamp", Instant.now().toString(),
                 "fluxos", configuracoes.listarIds()
         );
+    }
+
+    @RequestMapping(value = "/convert-test",
+            method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE})
+    public ResponseEntity<Object> converter(
+            @RequestBody(required = false) JsonNode payloadOrigem) {
+
+        log.info("[{}] payload recebido", payloadOrigem);
+
+        return ResponseEntity.ok(payloadOrigem);
     }
 }

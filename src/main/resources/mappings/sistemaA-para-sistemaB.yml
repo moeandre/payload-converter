@@ -8,10 +8,19 @@
 id: sistemaA-para-sistemaB
 descricao: "Converte o payload de apolice do Sistema A para o formato do Sistema B"
 mercado: seguro-auto
+destino: http://localhost:8080/admin/mappings/convert-test     # opcional - encaminha o convertido pra cá, mesmo verbo recebido
 
 # validacao opcional de JSON Schema, antes e depois da conversao (ver src/main/resources/schemas)
 schemaOrigem: schemas/sistemaA.schema.json
 schemaDestino: schemas/sistemaB.schema.json
+
+# 'destino' e opcional: quando presente, apos converter, a API encaminha o payload
+# convertido para essa URL usando o MESMO verbo HTTP recebido em /convert/{id} (POST,
+# PUT, PATCH, DELETE...), e devolve a resposta do sistema de destino de forma
+# transparente (mesmo status e corpo). Deixado comentado neste exemplo para que o fluxo
+# continue apenas retornando o payload convertido (e os testes automatizados funcionem
+# sem precisar de um Sistema B de verdade no ar).
+# destino: https://sistema-b.example.com/apolices
 
 mappings:
   # documento{numero,tipo} (origem) -> numeroCpf | numeroCnpj (destino), conforme o tipo

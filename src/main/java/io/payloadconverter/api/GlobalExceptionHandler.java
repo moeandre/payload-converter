@@ -1,6 +1,7 @@
 package io.payloadconverter.api;
 
 import io.payloadconverter.api.dto.ErroResposta;
+import io.payloadconverter.encaminhamento.DestinoIndisponivelException;
 import io.payloadconverter.engine.ConversionException;
 import io.payloadconverter.expression.ExpressionSyntaxException;
 import io.payloadconverter.mapping.MappingConfigException;
@@ -44,6 +45,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErroResposta> configuracaoInvalida(MappingConfigException e) {
         log.warn("Falha ao carregar configuracao de mapeamento: {}", e.getMessage());
         return responder(HttpStatus.UNPROCESSABLE_ENTITY, "configuracao_invalida", e.getMessage(), null, null);
+    }
+
+    /** Fluxo com 'destino' configurado, mas o sistema de destino nao respondeu (timeout, conexao recusada, etc). */
+    @ExceptionHandler(DestinoIndisponivelException.class)
+    public ResponseEntity<ErroResposta> destinoIndisponivel(DestinoIndisponivelException e) {
+        log.warn("Falha ao encaminhar para o destino: {}", e.getMessage());
+        return responder(HttpStatus.BAD_GATEWAY, "destino_indisponivel", e.getMessage(), null, null);
     }
 
     /** JSON de entrada malformado. */

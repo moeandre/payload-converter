@@ -6,8 +6,8 @@ arquivos **YAML** — sem recompilar código para adicionar um novo fluxo de con
 Stack: **Java 21+**, **Spring Boot 3.5**, Jackson (JSON + YAML). API REST, sem estado,
 com Virtual Threads habilitadas (Java 21) para alta concorrência.
 
-> ✅ Compilado e testado localmente (JDK 22, Maven 3.9.9) — 32/32 testes passando
-> (`mvn clean test`, `BUILD SUCCESS`), incluindo o fluxo de exemplo ponta-a-ponta via API.
+> ✅ Compilado e testado localmente — 34/34 testes passando (`mvn clean test`,
+> `BUILD SUCCESS`), incluindo o encaminhamento ponta-a-ponta contra um servidor HTTP real.
 
 ## Por que assim
 
@@ -27,16 +27,20 @@ com Virtual Threads habilitadas (Java 21) para alta concorrência.
   declarado no próprio YAML do fluxo.
 - **Configuração viva**: os YAML podem ser recarregados sem reiniciar a aplicação -
   automaticamente (watcher de filesystem) ou sob demanda (endpoint admin).
+- **Encaminhamento transparente**: um fluxo pode declarar `destino` no YAML - a API
+  converte e encaminha para essa URL usando o mesmo verbo HTTP recebido, devolvendo a
+  resposta do sistema de destino tal como veio.
 - **Rápido**: configuração é parseada uma vez e mantida em memória; expressões `when` e
   schemas são compilados/parseados uma única vez e cacheados; toda a travessia usa a
   árvore `JsonNode` do Jackson, sem reflection dinâmica.
 
 ## Como rodar
 
-O projeto inclui o **Maven Wrapper** — não precisa ter Maven instalado, só JDK 21+:
+Precisa de JDK 21+. O projeto inclui o **Maven Wrapper** (`./mvnw` / `mvnw.cmd`), então
+não precisa ter Maven instalado - mas se já tiver, `mvn` funciona igual:
 
 ```bash
-mvn spring-boot:run
+./mvnw spring-boot:run
 ```
 
 (Windows: `mvnw.cmd spring-boot:run`)
@@ -44,13 +48,13 @@ mvn spring-boot:run
 Rodar os testes:
 
 ```bash
-mvn clean test
+./mvnw clean test
 ```
 
 Empacotar e rodar o jar:
 
 ```bash
-mvn clean package
+./mvnw clean package
 java -jar target/payload-converter-0.1.0-SNAPSHOT.jar
 ```
 
@@ -83,6 +87,7 @@ src/main/java/io/payloadconverter/
   component/           # MarketComponent + ComponentRegistry ("componentes de mercado")
   component/exemplo/   # exemplo de componente de mercado (seguro-auto)
   schema/              # SchemaValidator + SchemaValidationException (JSON Schema)
+  encaminhamento/      # Encaminhador (proxy transparente para o 'destino' do fluxo)
   api/                 # ConversionController, AdminController, GlobalExceptionHandler
 src/main/resources/
   application.yml
@@ -99,6 +104,7 @@ descricao: "texto livre"          # opcional
 mercado: seguro-auto              # opcional, apenas documentacional/agrupamento
 schemaOrigem: schemas/x.json      # opcional - JSON Schema do payload de origem
 schemaDestino: schemas/y.json     # opcional - JSON Schema do payload de destino
+destino: https://sistema-b/x     # opcional - encaminha o convertido pra cá, mesmo verbo recebido
 
 mappings:                         # lista ordenada de regras
   - target: caminho.no.destino    # obrigatório
@@ -289,6 +295,55 @@ tiver um YAML inválido ou um `id` duplicado, a recarga é abortada, o erro é r
 (no endpoint) ou logado (no watcher automático), e a configuração anterior continua
 válida e servindo requisições normalmente - nunca fica um estado quebrado no ar.
 
+## Encaminhamento transparente (`destino`)
+
+Além de só converter e devolver o resultado, um fluxo pode declarar `destino` no YAML:
+
+```yaml
+destino: https://sistema-b.example.com/apolices
+```
+
+Quando presente, `/convert/{id}` passa a aceitar **qualquer verbo** (`GET`, `POST`,
+`PUT`, `PATCH`, `DELETE`) e, depois de converter o payload:
+
+1. Encaminha o payload convertido para `destino`, usando **o mesmo verbo HTTP** com que
+   o chamador chamou o orquestrador (chegou `PUT`? sai `PUT`; chegou `DELETE`? sai
+   `DELETE`).
+2. Devolve a resposta do sistema de destino **de forma transparente** ao chamador
+   original - mesmo status HTTP, mesmo `Content-Type`, mesmo corpo (bytes), sem
+   reinterpretar nem envelopar nada.
+
+Quando `destino` **não** é declarado, o comportamento é o de sempre: o endpoint só
+retorna o payload convertido (`200`), sem chamar ninguém.
+
+```bash
+curl -X PUT http://localhost:8080/convert/algum-fluxo-com-destino \
+  -H "Content-Type: application/json" -d '{ ... payload de origem ... }'
+# -> a resposta aqui e exatamente o que https://sistema-b.example.com/... respondeu ao PUT
+```
+
+Detalhes relevantes:
+
+- **Logging**: os payloads (de origem, o convertido enviado ao destino, e a resposta
+  recebida) só são logados em **DEBUG** (`io.payloadconverter: DEBUG` no `application.yml`
+  ou via `-Dlogging.level.io.payloadconverter=DEBUG`) - em produção, com o nível padrão
+  (`INFO`), nenhum conteúdo de payload vai pro log; só uma linha de auditoria com fluxo,
+  verbo, URL de destino e status da resposta.
+- **Falha ao encaminhar** (timeout, conexão recusada, DNS): `502 Bad Gateway`
+  (`DestinoIndisponivelException`) - a resposta, nesse caso, não pode ser transparente
+  porque não houve resposta nenhuma do outro lado.
+- **Timeouts** configuráveis via `payload-converter.encaminhamento.connect-timeout-ms`
+  (default 5000) e `read-timeout-ms` (default 15000).
+- A URL é **fixa por fluxo, configurada por quem escreve o YAML** - não é informada pelo
+  chamador da API. Isso é proposital: aceitar uma URL de destino arbitrária vinda do
+  chamador abriria a aplicação como um proxy aberto (risco de SSRF contra rede interna);
+  como fica só no YAML, quem controla o destino é quem tem acesso de escrita à
+  configuração do orquestrador, não qualquer chamador da API.
+- Ver [Encaminhador.java](src/main/java/io/payloadconverter/encaminhamento/Encaminhador.java)
+  e o teste ponta-a-ponta em
+  [ConversionControllerForwardTest.java](src/test/java/io/payloadconverter/api/ConversionControllerForwardTest.java)
+  (sobe um servidor HTTP real do JDK fazendo de "Sistema B" para validar verbo + corpo + resposta espelhada).
+
 ## Tratamento de erros (API)
 
 | Situação                                   | HTTP |
@@ -297,7 +352,9 @@ válida e servindo requisições normalmente - nunca fica um estado quebrado no 
 | Campo `required` ausente, função/componente desconhecido, array esperado e não encontrado, payload fora do JSON Schema, etc. | 422  |
 | YAML de mapeamento inválido (ex: em `POST /admin/mappings/reload`) | 422  |
 | JSON de entrada malformado                   | 400  |
+| Sistema de destino (`destino`) inacessível   | 502  |
 | Erro inesperado                              | 500  |
+| *(qualquer outro caso)*                      | o mesmo status/corpo devolvido pelo `destino`, espelhado |
 
 Corpo de erro padrão: `{ timestamp, status, erro, mensagem, fluxo, target }`.
 
