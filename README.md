@@ -36,7 +36,7 @@ com Virtual Threads habilitadas (Java 21) para alta concorrência.
 O projeto inclui o **Maven Wrapper** — não precisa ter Maven instalado, só JDK 21+:
 
 ```bash
-./mvnw spring-boot:run
+mvn spring-boot:run
 ```
 
 (Windows: `mvnw.cmd spring-boot:run`)
@@ -44,13 +44,13 @@ O projeto inclui o **Maven Wrapper** — não precisa ter Maven instalado, só J
 Rodar os testes:
 
 ```bash
-./mvnw clean test
+mvn clean test
 ```
 
 Empacotar e rodar o jar:
 
 ```bash
-./mvnw clean package
+mvn clean package
 java -jar target/payload-converter-0.1.0-SNAPSHOT.jar
 ```
 
